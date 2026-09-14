@@ -643,14 +643,15 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
           <small>Wello จะสร้าง PDF เวอร์ชันที่ลดขนาดลงในเบราว์เซอร์</small>
         </label>
         <div class="tool-options">
-          <label>คุณภาพ
+          <label>โหมดบีบอัด
             <select id="pdfQuality">
-              <option value="1.2">สมดุล — แนะนำ</option>
-              <option value="1.5">คมชัดกว่า — ไฟล์ใหญ่ขึ้น</option>
-              <option value="0.9">ประหยัดพื้นที่ — ไฟล์เล็กลง</option>
+              <option value="balanced">สมดุล — แนะนำ</option>
+              <option value="small">เล็กที่สุด — ยังอ่านง่าย</option>
+              <option value="clear">คมชัด — ลดขนาดแบบระมัดระวัง</option>
             </select>
           </label>
         </div>
+        <small style="display:block;margin-top:8px;color:#68738a">Wello จะทดลองหลายระดับและเลือกไฟล์ที่เล็กลงจริง โดยไม่ใช้ผลลัพธ์ที่ใหญ่กว่าต้นฉบับ</small>
         <div class="tool-progress hidden" id="pdfProgress"><span></span></div>
         <div class="tool-result hidden" id="pdfResult"></div>
         <button id="compressPdfBtn" class="primary big tool-action" type="button" disabled>บีบอัด PDF →</button>
@@ -663,21 +664,22 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
           <small>ประมวลผลในเบราว์เซอร์ • ผลลัพธ์เป็น WebM</small>
         </label>
         <div class="tool-options two">
-          <label>ความละเอียด
+          <label>โหมดบีบอัด
             <select id="videoResolution">
-              <option value="0.75">75% — สมดุล</option>
-              <option value="0.5">50% — ไฟล์เล็กลง</option>
-              <option value="1">100% — คงความละเอียด</option>
+              <option value="balanced">สมดุล — แนะนำ</option>
+              <option value="small">ไฟล์เล็ก — ส่งง่าย</option>
+              <option value="clear">คมชัด — ลดขนาดแบบระมัดระวัง</option>
             </select>
           </label>
-          <label>คุณภาพวิดีโอ
+          <label>เสียง
             <select id="videoBitrate">
-              <option value="1800000">1.8 Mbps</option>
-              <option value="1000000">1.0 Mbps — เล็กลง</option>
-              <option value="3000000">3.0 Mbps — ชัดกว่า</option>
+              <option value="128000">128 kbps — แนะนำ</option>
+              <option value="96000">96 kbps — เล็กลง</option>
+              <option value="160000">160 kbps — เสียงชัด</option>
             </select>
           </label>
         </div>
+        <small style="display:block;margin-top:8px;color:#68738a">ระบบจะลดความละเอียด/บิตเรตตามโหมด และไม่ปล่อยผลลัพธ์ถ้าไฟล์ใหม่ใหญ่กว่าต้นฉบับ</small>
         <div class="tool-progress hidden" id="videoProgress"><span></span></div>
         <div class="tool-result hidden" id="videoResult"></div>
         <button id="compressVideoBtn" class="primary big tool-action" type="button" disabled>บีบอัดวิดีโอ →</button>
@@ -806,19 +808,125 @@ let compressType='pdf';
 document.querySelectorAll('.tool-tab').forEach(btn=>btn.addEventListener('click',()=>{compressType=btn.dataset.compressType;document.querySelectorAll('.tool-tab').forEach(b=>b.classList.toggle('active',b===btn));$('pdfCompressPanel').classList.toggle('hidden',compressType!=='pdf');$('videoCompressPanel').classList.toggle('hidden',compressType!=='video')}));
 $('compressPdfFile').addEventListener('change',e=>{toolState.pdfFile=e.target.files?.[0]||null;$('compressPdfBtn').disabled=!toolState.pdfFile;$('pdfResult').classList.add('hidden')});
 $('compressPdfBtn').addEventListener('click',async()=>{
-  const file=toolState.pdfFile;if(!file||!window.pdfjsLib||!window.jspdf)return;$('compressPdfBtn').disabled=true;showResult('pdfResult','กำลังอ่าน PDF และสร้างไฟล์ที่เล็กลง…',true);setProgress('pdfProgress',3);
-  try{const data=await file.arrayBuffer();const pdf=await pdfjsLib.getDocument({data}).promise;const {jsPDF}=window.jspdf;const scale=Number($('pdfQuality').value);let out=null;
-    for(let n=1;n<=pdf.numPages;n++){const page=await pdf.getPage(n);const base=1.333*scale;const vp=page.getViewport({scale:base});const canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const img=canvas.toDataURL('image/jpeg',0.72);const orientation=canvas.width>=canvas.height?'landscape':'portrait';const w=orientation==='landscape'?297:210,h=orientation==='landscape'?210:297;if(!out)out=new jsPDF({unit:'mm',format:'a4',orientation,compress:true});else out.addPage('a4',orientation);const ratio=Math.min(w/(canvas.width),h/(canvas.height));const iw=canvas.width*ratio,ih=canvas.height*ratio;out.addImage(img,'JPEG',(w-iw)/2,(h-ih)/2,iw,ih,undefined,'FAST');setProgress('pdfProgress',10+(n/pdf.numPages)*80)}
-    const blob=out.output('blob');if(toolState.pdfUrl)URL.revokeObjectURL(toolState.pdfUrl);toolState.pdfUrl=URL.createObjectURL(blob);const saved=blob.size<file.size;showResult('pdfResult','เสร็จแล้ว · '+formatBytes(file.size)+' → <b>'+formatBytes(blob.size)+'</b> '+(saved?'(ลดลง '+Math.round((1-blob.size/file.size)*100)+'%)':'<br><small>ไฟล์นี้อาจไม่ได้เล็กลงจากต้นฉบับ เนื่องจากการบีบอัดเดิมของ PDF</small>')+'<br><a class="download-link" href="'+toolState.pdfUrl+'" download="wello-compressed.pdf">ดาวน์โหลด PDF ที่บีบอัด ↓</a>');setProgress('pdfProgress',100)
-  }catch(err){console.error(err);showResult('pdfResult','บีบอัด PDF ไม่สำเร็จ อาจเป็นไฟล์ที่เข้ารหัสหรือมีโครงสร้างที่ไม่รองรับ',false);setProgress('pdfProgress',-1)}finally{$('compressPdfBtn').disabled=!toolState.pdfFile}});
+  const file=toolState.pdfFile;if(!file||!window.pdfjsLib||!window.jspdf)return;
+  $('compressPdfBtn').disabled=true;showResult('pdfResult','กำลังวิเคราะห์ PDF และทดลองหลายระดับเพื่อเลือกไฟล์ที่เล็กลงจริง…',true);setProgress('pdfProgress',2);
+  try{
+    const data=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data}).promise;
+    const {jsPDF}=window.jspdf;
+    const mode=$('pdfQuality').value;
+    const profiles={
+      balanced:[{dpi:144,q:.82},{dpi:120,q:.76},{dpi:96,q:.70}],
+      small:[{dpi:120,q:.76},{dpi:96,q:.68},{dpi:82,q:.62}],
+      clear:[{dpi:160,q:.84},{dpi:144,q:.80},{dpi:120,q:.74}]
+    };
+    const candidates=profiles[mode]||profiles.balanced;
+    let best=null;
+    for(let c=0;c<candidates.length;c++){
+      const {dpi,q}=candidates[c];let out=null;
+      for(let n=1;n<=pdf.numPages;n++){
+        const page=await pdf.getPage(n);
+        const base=dpi/72;
+        const vp=page.getViewport({scale:base});
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(2,Math.ceil(vp.width));canvas.height=Math.max(2,Math.ceil(vp.height));
+        const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+        await page.render({canvasContext:ctx,viewport:vp,background:'white'}).promise;
+        const img=canvas.toDataURL('image/jpeg',q);
+        const widthMm=vp.width*25.4/dpi,heightMm=vp.height*25.4/dpi;
+        if(!out)out=new jsPDF({unit:'mm',format:[widthMm,heightMm],compress:true,putOnlyUsedFonts:true});
+        else out.addPage([widthMm,heightMm]);
+        out.addImage(img,'JPEG',0,0,widthMm,heightMm,undefined,'FAST');
+        setProgress('pdfProgress',5+((c*pdf.numPages+n)/(candidates.length*pdf.numPages))*88);
+      }
+      const blob=out.output('blob');
+      if(!best||blob.size<best.size)best={blob,size:blob.size,dpi,q};
+      if(blob.size<file.size*0.92)break;
+    }
+    if(!best||best.size>=file.size){
+      if(toolState.pdfUrl){URL.revokeObjectURL(toolState.pdfUrl);toolState.pdfUrl=null}
+      showResult('pdfResult','ไฟล์นี้ถูกบีบอัดมาแน่นอยู่แล้ว จึงไม่พบเวอร์ชันที่เล็กลงโดยยังรักษาความคมชัดในระดับใช้งานได้ · '+formatBytes(file.size),false);
+      setProgress('pdfProgress',100);return;
+    }
+    if(toolState.pdfUrl)URL.revokeObjectURL(toolState.pdfUrl);
+    toolState.pdfUrl=URL.createObjectURL(best.blob);
+    const saved=Math.round((1-best.size/file.size)*100);
+    showResult('pdfResult','บีบอัดสำเร็จ · '+formatBytes(file.size)+' → <b>'+formatBytes(best.size)+'</b> · ลดลง <b>'+saved+'%</b><br><small>เลือกโปรไฟล์ '+best.dpi+' DPI เพื่อให้ไฟล์เล็กลงโดยยังคงความคมชัดสำหรับการอ่าน</small><br><a class="download-link" href="'+toolState.pdfUrl+'" download="wello-compressed.pdf">ดาวน์โหลด PDF ที่บีบอัด ↓</a>');
+    setProgress('pdfProgress',100);
+  }catch(err){console.error(err);showResult('pdfResult','บีบอัด PDF ไม่สำเร็จ อาจเป็นไฟล์ที่เข้ารหัสหรือมีโครงสร้างที่ไม่รองรับ',false);setProgress('pdfProgress',-1)}
+  finally{$('compressPdfBtn').disabled=!toolState.pdfFile}
+});
 
 $('compressVideoFile').addEventListener('change',e=>{toolState.videoFile=e.target.files?.[0]||null;$('compressVideoBtn').disabled=!toolState.videoFile;$('videoResult').classList.add('hidden')});
 function pickVideoMime(){return ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(x=>MediaRecorder.isTypeSupported(x))||''}
 $('compressVideoBtn').addEventListener('click',async()=>{
- const file=toolState.videoFile;if(!file||!window.MediaRecorder){showResult('videoResult','เบราว์เซอร์นี้ไม่รองรับการบีบอัดวิดีโอในหน้าเว็บ',false);return}$('compressVideoBtn').disabled=true;showResult('videoResult','กำลังประมวลผลวิดีโอ… อย่าปิดหน้านี้',true);setProgress('videoProgress',2);
- const src=URL.createObjectURL(file),v=document.createElement('video');v.src=src;v.muted=false;v.playsInline=true;await new Promise((res,rej)=>{v.onloadedmetadata=res;v.onerror=rej});
- const scale=Number($('videoResolution').value),canvas=document.createElement('canvas');canvas.width=Math.max(2,Math.round(v.videoWidth*scale/2)*2);canvas.height=Math.max(2,Math.round(v.videoHeight*scale/2)*2);const ctx=canvas.getContext('2d');const stream=canvas.captureStream(30);try{const audioCtx=new (window.AudioContext||window.webkitAudioContext)();const source=audioCtx.createMediaElementSource(v);const dest=audioCtx.createMediaStreamDestination();source.connect(dest);source.connect(audioCtx.destination);dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));}catch(e){}
- const mime=pickVideoMime();const chunks=[];const rec=new MediaRecorder(stream,{mimeType:mime||undefined,videoBitsPerSecond:Number($('videoBitrate').value)});rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);const done=new Promise(resolve=>rec.onstop=resolve);rec.start(500);const draw=()=>{if(v.ended){rec.stop();return}ctx.drawImage(v,0,0,canvas.width,canvas.height);setProgress('videoProgress',Math.min(95,(v.currentTime/v.duration)*100));requestAnimationFrame(draw)};await v.play();draw();await done;URL.revokeObjectURL(src);const blob=new Blob(chunks,{type:rec.mimeType||'video/webm'});if(toolState.videoUrl)URL.revokeObjectURL(toolState.videoUrl);toolState.videoUrl=URL.createObjectURL(blob);showResult('videoResult','เสร็จแล้ว · '+formatBytes(file.size)+' → <b>'+formatBytes(blob.size)+'</b><br><small>ผลลัพธ์เป็น WebM เพื่อให้ประมวลผลได้ในเบราว์เซอร์</small><br><a class="download-link" href="'+toolState.videoUrl+'" download="wello-compressed.webm">ดาวน์โหลดวิดีโอ ↓</a>');setProgress('videoProgress',100);$('compressVideoBtn').disabled=!toolState.videoFile;
+ const file=toolState.videoFile;if(!file||!window.MediaRecorder){showResult('videoResult','เบราว์เซอร์นี้ไม่รองรับการบีบอัดวิดีโอในหน้าเว็บ',false);return}
+ $('compressVideoBtn').disabled=true;showResult('videoResult','กำลังประมวลผลวิดีโอ… ระบบจะเลือกค่าที่เล็กลงจริงให้โดยอัตโนมัติ',true);setProgress('videoProgress',2);
+ let src='';let v=null;let audioCtx=null;
+ try{
+  src=URL.createObjectURL(file);v=document.createElement('video');v.src=src;v.muted=false;v.playsInline=true;v.preload='metadata';
+  await new Promise((res,rej)=>{v.onloadedmetadata=res;v.onerror=()=>rej(new Error('video metadata error'))});
+  const mode=$('videoResolution').value;
+  const audioBitrate=Number($('videoBitrate').value)||128000;
+  const presets={balanced:[.75,1800000],small:[.60,1200000],clear:[.85,2200000]};
+  const [baseScale,baseVideoBitrate]=presets[mode]||presets.balanced;
+  const attempts=[
+    [baseScale,baseVideoBitrate],
+    [Math.max(.5,baseScale*.82),Math.round(baseVideoBitrate*.72)],
+    [Math.max(.42,baseScale*.68),Math.round(baseVideoBitrate*.55)]
+  ];
+  let best=null;
+  const mime=pickVideoMime();
+  for(let a=0;a<attempts.length;a++){
+    const [scale,videoBitrate]=attempts[a];
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.max(2,Math.round(v.videoWidth*scale/2)*2);canvas.height=Math.max(2,Math.round(v.videoHeight*scale/2)*2);
+    const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#000';
+    const stream=canvas.captureStream(30);
+    audioCtx=null;
+    try{
+      audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+      const source=audioCtx.createMediaElementSource(v);
+      const dest=audioCtx.createMediaStreamDestination();
+      source.connect(dest);
+      dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
+      if(audioCtx.state==='suspended')await audioCtx.resume();
+    }catch(e){}
+    const chunks=[];
+    const recOptions={videoBitsPerSecond:videoBitrate,audioBitsPerSecond:audioBitrate};if(mime)recOptions.mimeType=mime;
+    const rec=new MediaRecorder(stream,recOptions);
+    const done=new Promise((resolve,reject)=>{rec.onstop=resolve;rec.onerror=()=>reject(new Error('MediaRecorder error'))});
+    rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+    rec.start(500);
+    v.currentTime=0;
+    await v.play();
+    await new Promise(resolve=>{
+      const draw=()=>{
+        if(v.ended){resolve();return}
+        ctx.drawImage(v,0,0,canvas.width,canvas.height);
+        setProgress('videoProgress',Math.min(96,Math.round(((a/attempts.length)+(v.currentTime/v.duration)/attempts.length)*92)+3));
+        requestAnimationFrame(draw);
+      };draw();
+    });
+    if(rec.state!=='inactive')rec.stop();
+    await done;
+    if(audioCtx){try{await audioCtx.close()}catch(e){}}
+    const blob=new Blob(chunks,{type:rec.mimeType||'video/webm'});
+    if(!best||blob.size<best.size)best={blob,size:blob.size,scale};
+    if(blob.size<file.size*0.65)break;
+  }
+  if(!best||best.size>=file.size){
+    if(toolState.videoUrl){URL.revokeObjectURL(toolState.videoUrl);toolState.videoUrl=null}
+    showResult('videoResult','ยังลดขนาดให้เล็กลงกว่าต้นฉบับไม่ได้อย่างคุ้มค่า · '+formatBytes(file.size)+'<br><small>ระบบจึงไม่สร้างไฟล์หลอกที่ใหญ่กว่าเดิม</small>',false);
+    setProgress('videoProgress',100);return;
+  }
+  if(toolState.videoUrl)URL.revokeObjectURL(toolState.videoUrl);
+  toolState.videoUrl=URL.createObjectURL(best.blob);
+  const saved=Math.round((1-best.size/file.size)*100);
+  showResult('videoResult','บีบอัดสำเร็จ · '+formatBytes(file.size)+' → <b>'+formatBytes(best.size)+'</b> · ลดลง <b>'+saved+'%</b><br><small>ผลลัพธ์เป็น WebM · ความละเอียดประมาณ '+Math.round(best.scale*100)+'% ของต้นฉบับ</small><br><a class="download-link" href="'+toolState.videoUrl+'" download="wello-compressed.webm">ดาวน์โหลดวิดีโอ ↓</a>');
+  setProgress('videoProgress',100);
+ }catch(err){console.error(err);showResult('videoResult','บีบอัดวิดีโอไม่สำเร็จ อาจเกิดจากรูปแบบวิดีโอหรือเบราว์เซอร์ไม่รองรับ',false);setProgress('videoProgress',-1)}
+ finally{if(audioCtx){try{await audioCtx.close()}catch(e){}}if(src)URL.revokeObjectURL(src);$('compressVideoBtn').disabled=!toolState.videoFile}
 });
 </script>
 </body>
