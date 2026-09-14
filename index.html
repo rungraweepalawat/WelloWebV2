@@ -692,8 +692,7 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js"></script>
-<script src="https://unpkg.com/@ffmpeg/util@0.12.2/dist/umd/index.js"></script>
+<!-- FFmpeg is loaded as ESM on demand inside getVideoFFmpeg(). This avoids the UMD global/worker issue in standalone HTML. -->
 <script>
 if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";}
 const $ = id => document.getElementById(id);
@@ -885,14 +884,25 @@ let ffmpegLoading=null;
 async function getVideoFFmpeg(){
   if(ffmpegInstance?.loaded)return ffmpegInstance;
   if(ffmpegLoading)return ffmpegLoading;
-  if(!window.FFmpegWASM||!window.FFmpegUtil)throw new Error('FFmpeg library unavailable');
   ffmpegLoading=(async()=>{
-    const {FFmpeg}=window.FFmpegWASM;
-    const {toBlobURL}=window.FFmpegUtil;
+    // Standalone GitHub Pages build: load the official ESM packages dynamically.
+    // The UMD build can fail because its worker bundle is resolved relative to the page.
+    let FFmpeg, toBlobURL;
+    try{
+      const ffm=await import('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js');
+      const util=await import('https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js');
+      FFmpeg=ffm.FFmpeg;
+      toBlobURL=util.toBlobURL;
+    }catch(loadErr){
+      console.error('FFmpeg ESM load failed',loadErr);
+      throw new Error('FFmpeg WebAssembly โหลดไม่สำเร็จ');
+    }
+    if(!FFmpeg||!toBlobURL)throw new Error('FFmpeg WebAssembly ไม่พร้อมใช้งาน');
     const ffmpeg=new FFmpeg();
     ffmpeg.on('progress',({progress})=>{
       if(Number.isFinite(progress))setProgress('videoProgress',Math.max(5,Math.min(99,Math.round(progress*100))));
     });
+    ffmpeg.on('log',({message})=>console.debug('[Wello FFmpeg]',message));
     const base='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
     const coreURL=await toBlobURL(base+'/ffmpeg-core.js','text/javascript');
     const wasmURL=await toBlobURL(base+'/ffmpeg-core.wasm','application/wasm');
@@ -927,7 +937,7 @@ $('compressVideoBtn').addEventListener('click',async()=>{
   const ffmpeg=await getVideoFFmpeg();
   const kind=getMediaKind(file);
   if(kind==='unsupported') throw new Error('unsupported-file');
-  const inputExt=(file.name.match(/\.[^.]+$/)?.[0]||'');
+  const inputExt=(file.name.match(/\.[^.]+$/)?.[0]||'').toLowerCase();
   const inputName='wello-input'+inputExt;
   const outputName='wello-output.'+(kind==='mp3'?'mp3':kind==='h264'?'h264':'mp4');
   try{await ffmpeg.deleteFile(inputName)}catch(e){}
@@ -970,7 +980,7 @@ $('compressVideoBtn').addEventListener('click',async()=>{
     await ffmpeg.exec(args);
     const data=await ffmpeg.readFile(outputName);
     const blobType=kind==='mp3'?'audio/mpeg':kind==='h264'?'video/h264':'video/mp4';
-    const blob=new Blob([data.buffer],{type:blobType});
+    const blob=new Blob([data],{type:blobType});
     if(blob.size && (!best||blob.size<best.size))best={blob,size:blob.size,profile:c};
     if(blob.size<file.size*0.72)break;
   }
