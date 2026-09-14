@@ -661,7 +661,7 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
           <input id="compressVideoFile" type="file" accept="video/*">
           <span class="tool-drop-icon">▶</span>
           <strong>เลือกไฟล์วิดีโอ</strong>
-          <small>ประมวลผลในเบราว์เซอร์ • ผลลัพธ์เป็น WebM</small>
+          <small>ประมวลผลในเบราว์เซอร์ • ผลลัพธ์เป็น MP4 (H.264 + AAC)</small>
         </label>
         <div class="tool-options two">
           <label>โหมดบีบอัด
@@ -679,7 +679,7 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
             </select>
           </label>
         </div>
-        <small style="display:block;margin-top:8px;color:#68738a">ระบบจะลดความละเอียด/บิตเรตตามโหมด และไม่ปล่อยผลลัพธ์ถ้าไฟล์ใหม่ใหญ่กว่าต้นฉบับ</small>
+        <small style="display:block;margin-top:8px;color:#68738a">ระบบจะลดขนาดอย่างระมัดระวังและส่งออกเป็น MP4 โดยไม่ปล่อยผลลัพธ์ถ้าไฟล์ใหม่ใหญ่กว่าต้นฉบับ</small>
         <div class="tool-progress hidden" id="videoProgress"><span></span></div>
         <div class="tool-result hidden" id="videoResult"></div>
         <button id="compressVideoBtn" class="primary big tool-action" type="button" disabled>บีบอัดวิดีโอ →</button>
@@ -691,6 +691,8 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js"></script>
+<script src="https://unpkg.com/@ffmpeg/util@0.12.2/dist/umd/index.js"></script>
 <script>
 if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";}
 const $ = id => document.getElementById(id);
@@ -857,76 +859,95 @@ $('compressPdfBtn').addEventListener('click',async()=>{
   finally{$('compressPdfBtn').disabled=!toolState.pdfFile}
 });
 
-$('compressVideoFile').addEventListener('change',e=>{toolState.videoFile=e.target.files?.[0]||null;$('compressVideoBtn').disabled=!toolState.videoFile;$('videoResult').classList.add('hidden')});
-function pickVideoMime(){return ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(x=>MediaRecorder.isTypeSupported(x))||''}
+$('compressVideoFile').addEventListener('change',e=>{toolState.videoFile=e.target.files?.[0]||null;$('compressVideoBtn').disabled=!toolState.videoFile;$('videoResult').classList.add('hidden');setProgress('videoProgress',-1)});
+
+let ffmpegInstance=null;
+let ffmpegLoading=null;
+async function getVideoFFmpeg(){
+  if(ffmpegInstance?.loaded)return ffmpegInstance;
+  if(ffmpegLoading)return ffmpegLoading;
+  if(!window.FFmpegWASM||!window.FFmpegUtil)throw new Error('FFmpeg library unavailable');
+  ffmpegLoading=(async()=>{
+    const {FFmpeg}=window.FFmpegWASM;
+    const {toBlobURL}=window.FFmpegUtil;
+    const ffmpeg=new FFmpeg();
+    ffmpeg.on('progress',({progress})=>{
+      if(Number.isFinite(progress))setProgress('videoProgress',Math.max(5,Math.min(99,Math.round(progress*100))));
+    });
+    const base='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
+    const coreURL=await toBlobURL(base+'/ffmpeg-core.js','text/javascript');
+    const wasmURL=await toBlobURL(base+'/ffmpeg-core.wasm','application/wasm');
+    await ffmpeg.load({coreURL,wasmURL});
+    ffmpegInstance=ffmpeg;
+    return ffmpeg;
+  })();
+  try{return await ffmpegLoading}finally{ffmpegLoading=null}
+}
+function safeVideoName(name){return (name||'input').replace(/[^a-zA-Z0-9._-]+/g,'_').slice(0,120)||'input'}
+
 $('compressVideoBtn').addEventListener('click',async()=>{
- const file=toolState.videoFile;if(!file||!window.MediaRecorder){showResult('videoResult','เบราว์เซอร์นี้ไม่รองรับการบีบอัดวิดีโอในหน้าเว็บ',false);return}
- $('compressVideoBtn').disabled=true;showResult('videoResult','กำลังประมวลผลวิดีโอ… ระบบจะเลือกค่าที่เล็กลงจริงให้โดยอัตโนมัติ',true);setProgress('videoProgress',2);
- let src='';let v=null;let audioCtx=null;
+ const file=toolState.videoFile;if(!file)return;
+ $('compressVideoBtn').disabled=true;
+ showResult('videoResult','กำลังเตรียมตัวบีบอัดวิดีโอ… ครั้งแรกอาจใช้เวลาสักครู่เพราะต้องโหลดตัวประมวลผลวิดีโอ',true);setProgress('videoProgress',2);
  try{
-  src=URL.createObjectURL(file);v=document.createElement('video');v.src=src;v.muted=false;v.playsInline=true;v.preload='metadata';
-  await new Promise((res,rej)=>{v.onloadedmetadata=res;v.onerror=()=>rej(new Error('video metadata error'))});
+  const ffmpeg=await getVideoFFmpeg();
+  const inputName=safeVideoName(file.name);
+  const outputName='wello-compressed.mp4';
+  try{await ffmpeg.deleteFile(inputName)}catch(e){}
+  try{await ffmpeg.deleteFile(outputName)}catch(e){}
+  await ffmpeg.writeFile(inputName,await FFmpegUtil.fetchFile(file));
+
   const mode=$('videoResolution').value;
   const audioBitrate=Number($('videoBitrate').value)||128000;
-  const presets={balanced:[.75,1800000],small:[.60,1200000],clear:[.85,2200000]};
-  const [baseScale,baseVideoBitrate]=presets[mode]||presets.balanced;
-  const attempts=[
-    [baseScale,baseVideoBitrate],
-    [Math.max(.5,baseScale*.82),Math.round(baseVideoBitrate*.72)],
-    [Math.max(.42,baseScale*.68),Math.round(baseVideoBitrate*.55)]
-  ];
+  const profiles={
+    balanced:[{scale:'min(1920,iw)',crf:27},{scale:'min(1600,iw)',crf:29},{scale:'min(1280,iw)',crf:31}],
+    small:[{scale:'min(1280,iw)',crf:30},{scale:'min(1024,iw)',crf:32},{scale:'min(960,iw)',crf:34}],
+    clear:[{scale:'min(1920,iw)',crf:24},{scale:'min(1600,iw)',crf:26},{scale:'min(1280,iw)',crf:28}]
+  };
+  const candidates=profiles[mode]||profiles.balanced;
   let best=null;
-  const mime=pickVideoMime();
-  for(let a=0;a<attempts.length;a++){
-    const [scale,videoBitrate]=attempts[a];
-    const canvas=document.createElement('canvas');
-    canvas.width=Math.max(2,Math.round(v.videoWidth*scale/2)*2);canvas.height=Math.max(2,Math.round(v.videoHeight*scale/2)*2);
-    const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#000';
-    const stream=canvas.captureStream(30);
-    audioCtx=null;
+  for(let i=0;i<candidates.length;i++){
+    try{await ffmpeg.deleteFile(outputName)}catch(e){}
+    const c=candidates[i];
+    showResult('videoResult','กำลังบีบอัดเป็น MP4… โปรไฟล์ '+(i+1)+'/'+candidates.length,true);
+    setProgress('videoProgress',Math.max(5,Math.round((i/candidates.length)*90)));
+    let args=[
+      '-i',inputName,
+      '-vf','scale='+c.scale+':-2:flags=lanczos',
+      '-c:v','libx264','-preset','veryfast','-crf',String(c.crf),
+      '-pix_fmt','yuv420p','-c:a','aac','-b:a',String(audioBitrate),
+      '-movflags','+faststart','-y',outputName
+    ];
     try{
-      audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-      const source=audioCtx.createMediaElementSource(v);
-      const dest=audioCtx.createMediaStreamDestination();
-      source.connect(dest);
-      dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
-      if(audioCtx.state==='suspended')await audioCtx.resume();
-    }catch(e){}
-    const chunks=[];
-    const recOptions={videoBitsPerSecond:videoBitrate,audioBitsPerSecond:audioBitrate};if(mime)recOptions.mimeType=mime;
-    const rec=new MediaRecorder(stream,recOptions);
-    const done=new Promise((resolve,reject)=>{rec.onstop=resolve;rec.onerror=()=>reject(new Error('MediaRecorder error'))});
-    rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
-    rec.start(500);
-    v.currentTime=0;
-    await v.play();
-    await new Promise(resolve=>{
-      const draw=()=>{
-        if(v.ended){resolve();return}
-        ctx.drawImage(v,0,0,canvas.width,canvas.height);
-        setProgress('videoProgress',Math.min(96,Math.round(((a/attempts.length)+(v.currentTime/v.duration)/attempts.length)*92)+3));
-        requestAnimationFrame(draw);
-      };draw();
-    });
-    if(rec.state!=='inactive')rec.stop();
-    await done;
-    if(audioCtx){try{await audioCtx.close()}catch(e){}}
-    const blob=new Blob(chunks,{type:rec.mimeType||'video/webm'});
-    if(!best||blob.size<best.size)best={blob,size:blob.size,scale};
-    if(blob.size<file.size*0.65)break;
+      await ffmpeg.exec(args);
+    }catch(firstErr){
+      // Fallback for builds without libx264: keep MP4/H.264-compatible container via MPEG-4 Part 2.
+      args=[
+        '-i',inputName,
+        '-vf','scale='+c.scale+':-2:flags=lanczos',
+        '-c:v','mpeg4','-q:v',String(Math.max(3,Math.min(8,Math.round(c.crf/4)))),
+        '-c:a','aac','-b:a',String(audioBitrate),
+        '-movflags','+faststart','-y',outputName
+      ];
+      await ffmpeg.exec(args);
+    }
+    const data=await ffmpeg.readFile(outputName);
+    const blob=new Blob([data.buffer],{type:'video/mp4'});
+    if(blob.size && (!best||blob.size<best.size))best={blob,size:blob.size,crf:c.crf,scale:c.scale};
+    if(blob.size<file.size*0.72)break;
   }
   if(!best||best.size>=file.size){
     if(toolState.videoUrl){URL.revokeObjectURL(toolState.videoUrl);toolState.videoUrl=null}
-    showResult('videoResult','ยังลดขนาดให้เล็กลงกว่าต้นฉบับไม่ได้อย่างคุ้มค่า · '+formatBytes(file.size)+'<br><small>ระบบจึงไม่สร้างไฟล์หลอกที่ใหญ่กว่าเดิม</small>',false);
+    showResult('videoResult','วิดีโอนี้ถูกบีบอัดมาแน่นอยู่แล้ว จึงไม่พบ MP4 ที่เล็กลงโดยยังรักษาคุณภาพในระดับใช้งานได้ · '+formatBytes(file.size)+'<br><small>ระบบจึงไม่ให้ดาวน์โหลดไฟล์ที่ใหญ่กว่าเดิม</small>',false);
     setProgress('videoProgress',100);return;
   }
   if(toolState.videoUrl)URL.revokeObjectURL(toolState.videoUrl);
   toolState.videoUrl=URL.createObjectURL(best.blob);
   const saved=Math.round((1-best.size/file.size)*100);
-  showResult('videoResult','บีบอัดสำเร็จ · '+formatBytes(file.size)+' → <b>'+formatBytes(best.size)+'</b> · ลดลง <b>'+saved+'%</b><br><small>ผลลัพธ์เป็น WebM · ความละเอียดประมาณ '+Math.round(best.scale*100)+'% ของต้นฉบับ</small><br><a class="download-link" href="'+toolState.videoUrl+'" download="wello-compressed.webm">ดาวน์โหลดวิดีโอ ↓</a>');
+  showResult('videoResult','บีบอัดสำเร็จ · '+formatBytes(file.size)+' → <b>'+formatBytes(best.size)+'</b> · ลดลง <b>'+saved+'%</b><br><small>ผลลัพธ์เป็น <b>MP4</b> (H.264 + AAC) และลดความละเอียดเท่าที่จำเป็นเพื่อรักษาความคมชัด</small><br><a class="download-link" href="'+toolState.videoUrl+'" download="wello-compressed.mp4">ดาวน์โหลด MP4 ที่บีบอัด ↓</a>');
   setProgress('videoProgress',100);
- }catch(err){console.error(err);showResult('videoResult','บีบอัดวิดีโอไม่สำเร็จ อาจเกิดจากรูปแบบวิดีโอหรือเบราว์เซอร์ไม่รองรับ',false);setProgress('videoProgress',-1)}
- finally{if(audioCtx){try{await audioCtx.close()}catch(e){}}if(src)URL.revokeObjectURL(src);$('compressVideoBtn').disabled=!toolState.videoFile}
+ }catch(err){console.error(err);showResult('videoResult','บีบอัดวิดีโอไม่สำเร็จ อาจเกิดจากไฟล์ใหญ่เกินหน่วยความจำของเบราว์เซอร์ หรือรูปแบบวิดีโอไม่รองรับ',false);setProgress('videoProgress',-1)}
+ finally{try{if(ffmpegInstance){try{await ffmpegInstance.deleteFile('wello-compressed.mp4')}catch(e){}}}catch(e){}$('compressVideoBtn').disabled=!toolState.videoFile}
 });
 </script>
 </body>
