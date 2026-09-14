@@ -658,10 +658,10 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
       </div>
       <div id="videoCompressPanel" class="hidden">
         <label class="tool-drop">
-          <input id="compressVideoFile" type="file" accept="video/*">
+          <input id="compressVideoFile" type="file" accept="video/*,audio/mpeg,audio/mp3,.mp4,.m4v,.mov,.avi,.mkv,.webm,.3gp,.h264,.264,.mp3">
           <span class="tool-drop-icon">▶</span>
-          <strong>เลือกไฟล์วิดีโอ</strong>
-          <small>ประมวลผลในเบราว์เซอร์ • ผลลัพธ์เป็น MP4 (H.264 + AAC)</small>
+          <strong>เลือกไฟล์วิดีโอหรือเสียง</strong>
+          <small>รองรับ MP4 / H.264 / MP3 และไฟล์วิดีโอหรือเสียงทั่วไป • ผลลัพธ์จะคงชนิดไฟล์เดิม</small>
         </label>
         <div class="tool-options two">
           <label>โหมดบีบอัด
@@ -671,7 +671,7 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
               <option value="clear">คมชัด — ลดขนาดแบบระมัดระวัง</option>
             </select>
           </label>
-          <label>เสียง
+          <label>เสียง (สำหรับวิดีโอ)
             <select id="videoBitrate">
               <option value="128000">128 kbps — แนะนำ</option>
               <option value="96000">96 kbps — เล็กลง</option>
@@ -679,7 +679,7 @@ body.modal-open{overflow:hidden}.file-tool-modal{position:fixed;inset:0;z-index:
             </select>
           </label>
         </div>
-        <small style="display:block;margin-top:8px;color:#68738a">ระบบจะลดขนาดอย่างระมัดระวังและส่งออกเป็น MP4 โดยไม่ปล่อยผลลัพธ์ถ้าไฟล์ใหม่ใหญ่กว่าต้นฉบับ</small>
+        <small style="display:block;margin-top:8px;color:#68738a">ระบบจะลดขนาดอย่างระมัดระวังและส่งออกเป็นชนิดไฟล์เดิม เช่น MP4 → MP4, MP3 → MP3, H.264 → H.264 โดยไม่ปล่อยผลลัพธ์ถ้าไฟล์ใหม่ใหญ่กว่าต้นฉบับ</small>
         <div class="tool-progress hidden" id="videoProgress"><span></span></div>
         <div class="tool-result hidden" id="videoResult"></div>
         <button id="compressVideoBtn" class="primary big tool-action" type="button" disabled>บีบอัดวิดีโอ →</button>
@@ -885,68 +885,95 @@ async function getVideoFFmpeg(){
 }
 function safeVideoName(name){return (name||'input').replace(/[^a-zA-Z0-9._-]+/g,'_').slice(0,120)||'input'}
 
+function getMediaKind(file){
+  const ext=(file.name.match(/\.([^.]+)$/)?.[1]||'').toLowerCase();
+  if(ext==='mp3'||file.type==='audio/mpeg'||file.type==='audio/mp3') return 'mp3';
+  if(ext==='h264'||ext==='264') return 'h264';
+  return 'video';
+}
+function mediaOutputName(file,kind){
+  const ext=kind==='mp3'?'mp3':kind==='h264'?'h264':'mp4';
+  const base=(file.name.replace(/\.[^.]+$/,'')||'wello-compressed').replace(/[^a-zA-Z0-9._-]+/g,'_').slice(0,100);
+  return base+'-compressed.'+ext;
+}
+
 $('compressVideoBtn').addEventListener('click',async()=>{
  const file=toolState.videoFile;if(!file)return;
  $('compressVideoBtn').disabled=true;
- showResult('videoResult','กำลังเตรียมตัวบีบอัดวิดีโอ… ครั้งแรกอาจใช้เวลาสักครู่เพราะต้องโหลดตัวประมวลผลวิดีโอ',true);setProgress('videoProgress',2);
+ showResult('videoResult','กำลังเตรียมตัวบีบอัดไฟล์… ครั้งแรกอาจใช้เวลาสักครู่เพราะต้องโหลดตัวประมวลผล',true);setProgress('videoProgress',2);
  try{
   const ffmpeg=await getVideoFFmpeg();
-  const inputName=safeVideoName(file.name);
-  const outputName='wello-compressed.mp4';
+  const kind=getMediaKind(file);
+  const inputName='wello-input'+(file.name.match(/\.[^.]+$/)?.[0]||'');
+  const outputName=mediaOutputName(file,kind);
   try{await ffmpeg.deleteFile(inputName)}catch(e){}
   try{await ffmpeg.deleteFile(outputName)}catch(e){}
-  await ffmpeg.writeFile(inputName,await FFmpegUtil.fetchFile(file));
+  await ffmpeg.writeFile(inputName,await window.FFmpegUtil.fetchFile(file));
 
   const mode=$('videoResolution').value;
   const audioBitrate=Number($('videoBitrate').value)||128000;
-  const profiles={
-    balanced:[{scale:'min(1920,iw)',crf:27},{scale:'min(1600,iw)',crf:29},{scale:'min(1280,iw)',crf:31}],
-    small:[{scale:'min(1280,iw)',crf:30},{scale:'min(1024,iw)',crf:32},{scale:'min(960,iw)',crf:34}],
-    clear:[{scale:'min(1920,iw)',crf:24},{scale:'min(1600,iw)',crf:26},{scale:'min(1280,iw)',crf:28}]
-  };
-  const candidates=profiles[mode]||profiles.balanced;
+  let candidates;
+  if(kind==='mp3'){
+    // Keep MP3 as MP3; lower bitrate only when it can actually reduce the file.
+    candidates=[{ab:96000},{ab:112000},{ab:128000}];
+  }else if(kind==='h264'){
+    // Elementary H.264 has no audio track/container. Keep it as H.264.
+    candidates=(mode==='small'?[{crf:31,scale:'min(1280,iw)'},{crf:33,scale:'min(1024,iw)'},{crf:35,scale:'min(960,iw)'}]:mode==='clear'?[{crf:25,scale:'min(1920,iw)'},{crf:27,scale:'min(1600,iw)'},{crf:29,scale:'min(1280,iw)'}]:[{crf:28,scale:'min(1920,iw)'},{crf:30,scale:'min(1600,iw)'},{crf:32,scale:'min(1280,iw)'}]);
+  }else{
+    const profiles={
+      balanced:[{scale:'min(1920,iw)',crf:27},{scale:'min(1600,iw)',crf:29},{scale:'min(1280,iw)',crf:31}],
+      small:[{scale:'min(1280,iw)',crf:30},{scale:'min(1024,iw)',crf:32},{scale:'min(960,iw)',crf:34}],
+      clear:[{scale:'min(1920,iw)',crf:24},{scale:'min(1600,iw)',crf:26},{scale:'min(1280,iw)',crf:28}]
+    };
+    candidates=profiles[mode]||profiles.balanced;
+  }
+
   let best=null;
   for(let i=0;i<candidates.length;i++){
     try{await ffmpeg.deleteFile(outputName)}catch(e){}
     const c=candidates[i];
-    showResult('videoResult','กำลังบีบอัดเป็น MP4… โปรไฟล์ '+(i+1)+'/'+candidates.length,true);
+    const label=kind==='mp3'?'MP3':kind==='h264'?'H.264':'MP4 (H.264 + AAC)';
+    showResult('videoResult','กำลังบีบอัดเป็น '+label+'… โปรไฟล์ '+(i+1)+'/'+candidates.length,true);
     setProgress('videoProgress',Math.max(5,Math.round((i/candidates.length)*90)));
-    let args=[
-      '-i',inputName,
-      '-vf','scale='+c.scale+':-2:flags=lanczos',
-      '-c:v','libx264','-preset','veryfast','-crf',String(c.crf),
-      '-pix_fmt','yuv420p','-c:a','aac','-b:a',String(audioBitrate),
-      '-movflags','+faststart','-y',outputName
-    ];
+    let args;
+    if(kind==='mp3'){
+      args=['-i',inputName,'-vn','-c:a','libmp3lame','-b:a',String(c.ab),'-y',outputName];
+    }else if(kind==='h264'){
+      args=['-i',inputName,'-an','-c:v','libx264','-preset','medium','-crf',String(c.crf),'-pix_fmt','yuv420p','-f','h264','-y',outputName];
+    }else{
+      args=['-i',inputName,'-vf','scale='+c.scale+':-2:flags=lanczos','-c:v','libx264','-preset','medium','-crf',String(c.crf),'-pix_fmt','yuv420p','-c:a','aac','-b:a',String(audioBitrate),'-movflags','+faststart','-y',outputName];
+    }
     try{
       await ffmpeg.exec(args);
     }catch(firstErr){
-      // Fallback for builds without libx264: keep MP4/H.264-compatible container via MPEG-4 Part 2.
-      args=[
-        '-i',inputName,
-        '-vf','scale='+c.scale+':-2:flags=lanczos',
-        '-c:v','mpeg4','-q:v',String(Math.max(3,Math.min(8,Math.round(c.crf/4)))),
-        '-c:a','aac','-b:a',String(audioBitrate),
-        '-movflags','+faststart','-y',outputName
-      ];
+      if(kind==='mp3'){
+        args=['-i',inputName,'-vn','-c:a','aac','-b:a',String(c.ab),'-f','mp3','-y',outputName];
+      }else if(kind==='h264'){
+        throw firstErr;
+      }else{
+        // Fallback only if the browser FFmpeg build lacks libx264.
+        args=['-i',inputName,'-vf','scale='+c.scale+':-2:flags=lanczos','-c:v','mpeg4','-q:v',String(Math.max(3,Math.min(8,Math.round(c.crf/4)))),'-c:a','aac','-b:a',String(audioBitrate),'-movflags','+faststart','-y',outputName];
+      }
       await ffmpeg.exec(args);
     }
     const data=await ffmpeg.readFile(outputName);
-    const blob=new Blob([data.buffer],{type:'video/mp4'});
-    if(blob.size && (!best||blob.size<best.size))best={blob,size:blob.size,crf:c.crf,scale:c.scale};
+    const blobType=kind==='mp3'?'audio/mpeg':kind==='h264'?'video/h264':'video/mp4';
+    const blob=new Blob([data.buffer],{type:blobType});
+    if(blob.size && (!best||blob.size<best.size))best={blob,size:blob.size,profile:c};
     if(blob.size<file.size*0.72)break;
   }
   if(!best||best.size>=file.size){
     if(toolState.videoUrl){URL.revokeObjectURL(toolState.videoUrl);toolState.videoUrl=null}
-    showResult('videoResult','วิดีโอนี้ถูกบีบอัดมาแน่นอยู่แล้ว จึงไม่พบ MP4 ที่เล็กลงโดยยังรักษาคุณภาพในระดับใช้งานได้ · '+formatBytes(file.size)+'<br><small>ระบบจึงไม่ให้ดาวน์โหลดไฟล์ที่ใหญ่กว่าเดิม</small>',false);
+    showResult('videoResult','ไฟล์นี้ถูกบีบอัดมาแน่นอยู่แล้ว จึงไม่พบไฟล์ '+(kind==='mp3'?'MP3':kind==='h264'?'H.264':'MP4')+' ที่เล็กลงโดยยังรักษาคุณภาพในระดับใช้งานได้ · '+formatBytes(file.size)+'<br><small>ระบบจึงไม่ให้ดาวน์โหลดไฟล์ที่ใหญ่กว่าเดิม</small>',false);
     setProgress('videoProgress',100);return;
   }
   if(toolState.videoUrl)URL.revokeObjectURL(toolState.videoUrl);
   toolState.videoUrl=URL.createObjectURL(best.blob);
   const saved=Math.round((1-best.size/file.size)*100);
-  showResult('videoResult','บีบอัดสำเร็จ · '+formatBytes(file.size)+' → <b>'+formatBytes(best.size)+'</b> · ลดลง <b>'+saved+'%</b><br><small>ผลลัพธ์เป็น <b>MP4</b> (H.264 + AAC) และลดความละเอียดเท่าที่จำเป็นเพื่อรักษาความคมชัด</small><br><a class="download-link" href="'+toolState.videoUrl+'" download="wello-compressed.mp4">ดาวน์โหลด MP4 ที่บีบอัด ↓</a>');
+  const label=kind==='mp3'?'MP3':kind==='h264'?'H.264':'MP4 (H.264 + AAC)';
+  showResult('videoResult','บีบอัดสำเร็จ · '+formatBytes(file.size)+' → <b>'+formatBytes(best.size)+'</b> · ลดลง <b>'+saved+'%</b><br><small>ผลลัพธ์เป็น <b>'+label+'</b> และระบบพยายามรักษาคุณภาพ/เสียงให้ดีที่สุดตามชนิดไฟล์ต้นฉบับ</small><br><a class="download-link" href="'+toolState.videoUrl+'" download="'+mediaOutputName(file,kind)+'">ดาวน์โหลด '+(kind==='mp3'?'MP3':kind==='h264'?'H.264':'MP4')+' ที่บีบอัด ↓</a>');
   setProgress('videoProgress',100);
- }catch(err){console.error(err);showResult('videoResult','บีบอัดวิดีโอไม่สำเร็จ อาจเกิดจากไฟล์ใหญ่เกินหน่วยความจำของเบราว์เซอร์ หรือรูปแบบวิดีโอไม่รองรับ',false);setProgress('videoProgress',-1)}
+ }catch(err){console.error(err);showResult('videoResult','บีบอัดไฟล์ไม่สำเร็จ อาจเกิดจากไฟล์ใหญ่เกินหน่วยความจำของเบราว์เซอร์ หรือรูปแบบ/codec ไม่รองรับ',false);setProgress('videoProgress',-1)}
  finally{try{if(ffmpegInstance){try{await ffmpegInstance.deleteFile('wello-compressed.mp4')}catch(e){}}}catch(e){}$('compressVideoBtn').disabled=!toolState.videoFile}
 });
 </script>
