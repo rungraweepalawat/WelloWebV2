@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://wellodocs.com/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
+  <url><loc>https://wellodocs.com/</loc><lastmod>2026-10-11</lastmod></url>
+  <url><loc>https://wellodocs.com/tools/</loc><lastmod>2026-10-11</lastmod></url>
+  <url><loc>https://wellodocs.com/blog/</loc><lastmod>2026-10-11</lastmod></url>
+  <url><loc>https://wellodocs.com/blog/graphic-design-monthly.html</loc><lastmod>2026-10-11</lastmod></url>
+  <url><loc>https://wellodocs.com/blog/logo-design-checklist.html</loc><lastmod>2026-10-11</lastmod></url>
+  <url><loc>https://wellodocs.com/blog/packaging-design-checklist.html</loc><lastmod>2026-10-11</lastmod></url>
+  <url><loc>https://wellodocs.com/blog/monthly-content-planning.html</loc><lastmod>2026-10-11</lastmod></url>
 </urlset>
