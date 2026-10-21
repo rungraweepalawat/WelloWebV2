@@ -47,3 +47,4 @@ UPDATE v56 — หน้าแรกและเครื่องมือแ�
 - เครื่องมือฟรี: tools/index.html (ใบเสนอราคา ใบแจ้งหนี้ ใบเสร็จรับเงิน)
 - เมนูส่วนหัวของหน้าแรกเชื่อมไปหน้า blog/ และ tools/ โดยตรง
 - อัปโหลดโฟลเดอร์ tools/ เพิ่มไปกับ index.html, blog/, images/, robots.txt, sitemap.xml และ CNAME
+SEO update 2026-10-20: refreshed blog page titles/descriptions and buyer-focused content; added graphic-design-pricing.html and social-media-graphic-design.html; corrected /tools/ search metadata; updated sitemap and internal links. Search volume should be verified in Google Keyword Planner and Search Console after publishing.
