@@ -1145,7 +1145,11 @@ html{scroll-behavior:smooth;scroll-padding-top:88px}body{background:#f7f9ff;colo
 <span class="brand-wordmark">wello<span>•</span></span>
 <span class="brand-byline">by Tuaton <b>brand lab</b></span>
 </a>
-<div class="nav-right">
+<a class="mobile-contact-link" href="#contact">ติดต่อเรา</a>
+<button aria-label="เปิดเมนู" aria-expanded="false" aria-controls="wello-mobile-primary-menu" class="mobile-nav-toggle" type="button">
+<span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+</button>
+<div class="nav-right" id="wello-mobile-primary-menu">
 <a href="#home">หน้าหลัก</a>
 <a href="tools/index.html">เครื่องมือฟรี</a>
 <a href="#monthly-services">บริการรายเดือน</a>
@@ -4405,6 +4409,158 @@ html { scroll-behavior: smooth; }
 @media(max-width:760px){.blog-preview-section,.free-tools-section{padding:52px 0}.blog-preview-grid{grid-template-columns:1fr;gap:14px}.blog-preview-card:last-child{grid-column:auto}.blog-preview-image{height:190px}.blog-preview-copy{padding:18px}.blog-preview-footer{align-items:flex-start;flex-direction:column}.functional-tools{grid-template-columns:1fr!important}.functional-tools .doc-card{min-height:0!important}.functional-tools .doc-card-copy{min-height:0}.functional-tools .doc-icon{width:66px!important;height:66px!important;min-width:66px!important;border-radius:19px!important}.functional-tools .doc-icon svg{width:42px!important;height:42px!important}}
 @media(prefers-reduced-motion:reduce){.blog-preview-card,.blog-preview-image img{transition:none!important}.blog-preview-card:hover,.blog-preview-card:focus-visible{transform:none!important}.blog-preview-card:hover .blog-preview-image img{transform:none!important}}
 </style>
+
+
+<style id="wello-mobile-navigation-repair">
+/* Mobile-only navigation repair: keep all primary links accessible through a compact dropdown. */
+.nav .mobile-contact-link,
+.nav .mobile-nav-toggle { display:none; }
+@media (max-width: 760px) {
+  .nav.container {
+    position:relative !important;
+    z-index:1000 !important;
+    height:72px !important;
+    min-height:72px !important;
+    gap:8px !important;
+    flex-wrap:nowrap !important;
+    overflow:visible !important;
+  }
+  .nav .brand-row { flex:0 1 auto !important; min-width:0 !important; }
+  .nav .mobile-contact-link {
+    display:inline-flex !important;
+    flex:0 0 auto !important;
+    align-items:center !important;
+    justify-content:center !important;
+    min-height:42px !important;
+    box-sizing:border-box !important;
+    padding:10px 13px !important;
+    border-radius:999px !important;
+    background:#F76595 !important;
+    color:#022CB7 !important;
+    text-decoration:none !important;
+    white-space:nowrap !important;
+    font-size:12px !important;
+    font-weight:700 !important;
+    line-height:1.2 !important;
+    box-shadow:0 5px 14px rgba(247,101,149,.18) !important;
+  }
+  .nav .mobile-nav-toggle {
+    display:inline-flex !important;
+    flex:0 0 42px !important;
+    width:42px !important;
+    min-width:42px !important;
+    height:42px !important;
+    padding:0 !important;
+    margin:0 !important;
+    align-items:center !important;
+    justify-content:center !important;
+    flex-direction:column !important;
+    gap:4px !important;
+    border:1px solid #DDE5F3 !important;
+    border-radius:13px !important;
+    background:#FFFFFF !important;
+    box-shadow:0 4px 12px rgba(2,44,183,.06) !important;
+    cursor:pointer !important;
+  }
+  .nav .mobile-nav-toggle span {
+    display:block !important;
+    width:18px !important;
+    height:2px !important;
+    min-height:2px !important;
+    border-radius:2px !important;
+    background:#022CB7 !important;
+    transition:transform .18s ease, opacity .18s ease !important;
+  }
+  .nav .mobile-nav-toggle[aria-expanded="true"] span:first-child { transform:translateY(6px) rotate(45deg) !important; }
+  .nav .mobile-nav-toggle[aria-expanded="true"] span:nth-child(2) { opacity:0 !important; }
+  .nav .mobile-nav-toggle[aria-expanded="true"] span:last-child { transform:translateY(-6px) rotate(-45deg) !important; }
+  .nav .nav-right {
+    display:none !important;
+    position:absolute !important;
+    top:calc(100% + 6px) !important;
+    left:0 !important;
+    right:0 !important;
+    width:100% !important;
+    max-width:100% !important;
+    max-height:calc(100vh - 100px) !important;
+    overflow-y:auto !important;
+    box-sizing:border-box !important;
+    margin:0 !important;
+    padding:10px !important;
+    flex-direction:column !important;
+    align-items:stretch !important;
+    gap:4px !important;
+    border:1px solid #E5EAF3 !important;
+    border-radius:18px !important;
+    background:#FFFFFF !important;
+    box-shadow:0 18px 40px rgba(14,34,79,.16) !important;
+    z-index:1100 !important;
+  }
+  .nav .nav-right.is-open { display:flex !important; }
+  .nav .nav-right > a,
+  .nav .nav-right > a:not(.nav-cta),
+  .nav .nav-right > a.nav-cta {
+    display:flex !important;
+    align-items:center !important;
+    justify-content:flex-start !important;
+    width:100% !important;
+    min-height:44px !important;
+    box-sizing:border-box !important;
+    margin:0 !important;
+    padding:12px 14px !important;
+    border-radius:12px !important;
+    background:transparent !important;
+    color:#17336F !important;
+    box-shadow:none !important;
+    text-align:left !important;
+    text-decoration:none !important;
+    white-space:normal !important;
+    font-size:14px !important;
+    line-height:1.4 !important;
+  }
+  .nav .nav-right > a[href="#contact"] { display:none !important; }
+  .nav .nav-right > a.nav-cta {
+    margin-top:4px !important;
+    background:#022CB7 !important;
+    color:#FFFFFF !important;
+    font-weight:700 !important;
+  }
+  .nav .nav-right > a:hover,
+  .nav .nav-right > a:focus-visible { background:#F2F6FF !important; outline-offset:2px; }
+  .nav .nav-right > a.nav-cta:hover { background:#173FC9 !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav .mobile-nav-toggle span { transition:none !important; }
+}
+</style>
+<script id="wello-mobile-navigation-controller">
+(() => {
+  const nav = document.querySelector('.nav.container');
+  if (!nav || nav.dataset.mobileNavigationReady === 'true') return;
+  const menu = nav.querySelector('#wello-mobile-primary-menu');
+  const toggle = nav.querySelector('.mobile-nav-toggle');
+  if (!menu || !toggle) return;
+  nav.dataset.mobileNavigationReady = 'true';
+  const closeMenu = () => {
+    menu.classList.remove('is-open');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'เปิดเมนู');
+  };
+  const openMenu = () => {
+    menu.classList.add('is-open');
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-label', 'ปิดเมนู');
+  };
+  toggle.addEventListener('click', () => {
+    if (toggle.getAttribute('aria-expanded') === 'true') closeMenu();
+    else openMenu();
+  });
+  menu.querySelectorAll('a').forEach(link => link.addEventListener('click', closeMenu));
+  document.addEventListener('click', event => { if (!nav.contains(event.target)) closeMenu(); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenu(); });
+  window.addEventListener('resize', () => { if (window.innerWidth > 760) closeMenu(); });
+})();
+</script>
 
 </body>
 </html>
