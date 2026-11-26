@@ -1129,18 +1129,20 @@ html{scroll-behavior:smooth;scroll-padding-top:88px}body{background:#f7f9ff;colo
   margin-inline: auto;
   padding-block: 42px;
 }
-.wello-home-banner-copy { width: min(48%, 560px); }
+.wello-home-banner-copy { width: min(43%, 540px); }
 #creative-services.wello-home-banner h1 {
   margin: 0 0 16px;
-  color: #fff;
+  color: #fff !important;
+  text-shadow: none !important;
   font-size: clamp(28px, 3.7vw, 62px);
   font-weight: 800;
   line-height: 1.2;
 }
-#creative-services.wello-home-banner h1 em { color: #ff8eb5; font-style: normal; }
+#creative-services.wello-home-banner h1 em { color: #ff8eb5 !important; font-style: normal; text-shadow: none !important; background: none !important; -webkit-text-fill-color: currentColor !important; }
+#creative-services.wello-home-banner h1 em::after { display: none !important; }
 #creative-services.wello-home-banner p {
   margin: 0 0 24px;
-  color: #eef3ff;
+  color: #eef3ff !important;
   font-size: clamp(15px, 1.23vw, 18px);
   line-height: 1.65;
 }
@@ -1165,7 +1167,7 @@ html{scroll-behavior:smooth;scroll-padding-top:88px}body{background:#f7f9ff;colo
   color: #fff;
 }
 .wello-home-banner-actions a:focus-visible { outline: 2px solid white; outline-offset: 4px; }
-.wello-home-banner-actions .ui-action-icon { display: none; }
+#creative-services.wello-home-banner .wello-home-banner-actions .ui-action-icon { display: none !important; }
 @media (max-width: 760px) {
   #creative-services.wello-home-banner { min-height: 0 !important; }
   .wello-home-banner-inner {
